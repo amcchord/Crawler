@@ -1,0 +1,63 @@
+Input:
+
+i2s 32 bit
+i2s 4 channel
+pulse density, for mems mic
+adc1
+adc0 & adc1 with 4X oversample + filter
+
+
+Output:
+
+i2s 32 bit
+i2s 4 channel
+dac with 4X oversample + dither
+
+
+Mixer:
+
+Soft clipping mixer
+gradual changing gain
+
+
+Play:
+
+play mp3 from memory, flash, sd card
+(add seeking & looping to all play objects)
+
+
+Record:
+
+record to memory, flash, sd card
+
+
+Synth:
+
+wavetable from memory, flash
+waveforms with modulation
+Karplus-Strong
+
+
+Filter
+
+comb (options for feedforward, feedback, lowpass feedback)
+allpass
+(design tool for FIR)
+(design tool for Biquad)
+
+
+Effect
+
+Pitch shift in real time (might be beyond Teensy's capability)
+
+
+Analyze
+
+volume, configurable attack vs decay time constants
+FFT from downsampled data
+FSK demodulate (eg, SoftModem)
+Beat/tempo detection
+
+
+
+
