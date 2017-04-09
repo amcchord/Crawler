@@ -55,6 +55,12 @@ double consKp=0.7, consKi=.3, consKd=0.02;
 double Setpoint, Input, Output;
 PID headingPID(&Input, &Output, &Setpoint, consKp, consKi, consKd, DIRECT);
 
+#define TURN_SENSITIVITY 40.0 //The lower this number the more sensitive we are to
+                              //Turn Inputs
+#define THROTTLESTART 40      //This is the PWM level that actually makes the wheels
+                              //move
+
+
 
 //Trim for RC Inputs
 const int rcMin = 1099;
@@ -63,15 +69,15 @@ int rcScale = rcMax - rcMin;
 #define FAILSAFE false //Failsafe is disabled for now
 #define DEADBAND 10 //If thrust values are within +/-10 of 0 assume they are 0
 #define REJECTTHRESH 2200 //Rc values above this number are considered invalid
-#define RCVR_PPM 23
+#define RCVR_PPM 23 //Pin where the PPM comes in
 
 //Create some global variables to store the state of RC Reciver Channels
 double rc1 = 0; // Turn
 double rc2 = 0; // Thrust
-double rc3 = 0; // Weapon Power
-double rc4 = 0; // Weapon Directon
-double rc5 = 0; // RainbowMode!
-double rc6 = 0; // Failsafe (Not used yet)
+double rc3 = 0; //
+double rc4 = 0; //
+double rc5 = 0; // Mode
+double rc6 = 0; // Safety
 
 //Define the PPM decoder object
 PulsePositionInput myIn;
@@ -88,7 +94,7 @@ Servo weaponServo;
 #define BACKRIGHTTHROTTLE 4
 #define BACKRIGHTDIRECTION 8
 
-#define MOTORENABLE 11
+#define MOTORENABLE 11 //This pin must be high for the ESCs to power on
 
 //Some globals for handling mode switching
 int lastMode = 0;
@@ -100,7 +106,6 @@ int right = 0;
 int count = 10;
 imu::Vector<3> euler;
 
-bool tightTurns = false;
 
 IntervalTimer gyroSafety;
 
@@ -133,8 +138,6 @@ void setup()   {
   analogWrite(BACKRIGHTTHROTTLE, 0);
   digitalWrite(BACKRIGHTDIRECTION, 0);
 
-
-
   Serial.begin(9600);
   myIn.begin(RCVR_PPM);
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
@@ -161,6 +164,7 @@ void setup()   {
 
   delay(100);
   gyroSafety.begin(gSafety, 2000000); // Call the safety function after 2 seocnds
+  gyroSafety.priority(10);
   if(!bno.begin())
   {
     display.clearDisplay();
@@ -313,21 +317,22 @@ void loop() {
 
 
 void gSafety(){
-  CPU_RESTART
+  //We are here because the Gyro hung... we are going to reboot!
+   CPU_RESTART
    delay(1000);
-
-
 }
 
 
 void fullAuto(double thrust, double turn){
+
+  //Lets run away from areas where we might fall over!
   double tilt = euler.y();
   double thrustAdjust;
-  if (tilt < -30){
-    thrustAdjust = -80 + tilt * 2;
+  if (tilt < -20){
+    thrustAdjust = -100 + tilt * 2;
   }
-  else if (tilt > 30){
-    thrustAdjust = 80 + tilt * 2;
+  else if (tilt > 20){
+    thrustAdjust = 100 + tilt * 2;
   }
   thrust = thrust + thrustAdjust;
   if (thrust > 250){
@@ -336,21 +341,14 @@ void fullAuto(double thrust, double turn){
   else if (thrust < -250){
     thrust = -250;
   }
-  tightTurns = true;
   driveAsist(thrust, turn);
-  tightTurns = false;
+
 }
 
 void driveAsist(double thrust, double turn){
   double currentHeading = euler.x();
+  int throttleAssist = THROTTLESTART;
 
-
-
-
-
-  int throttleAssist = 40;
-
-  //Calulate the heading difference taking into account this is a circle
   if (thrust < 30){
     targetHeading = currentHeading;
     if (turn < 0 ){
@@ -359,18 +357,20 @@ void driveAsist(double thrust, double turn){
     else if (turn > 0 ){
       turn = ((turn * turn) / 250);
     }
-
-
     simpleDrive(thrust, turn);
-  } else {
-
-    targetHeading = targetHeading + (turn/40.0) * -1;
+  }
+  else {
+    //Turn input now shifts our target heading
+    targetHeading = targetHeading + (turn/TURN_SENSITIVITY) * -1;
     if (targetHeading < 0){
       targetHeading = targetHeading + 360;
     }
     if (targetHeading > 360){
       targetHeading = targetHeading - 360;
     }
+
+    //Figure out how far off couse we are.. heading different needs to correct
+    //for the fact we can never be more than 180 degrees off target.
     if (targetHeading - currentHeading < -180){
       headingDelta = targetHeading - currentHeading + 360;
     }
@@ -381,16 +381,14 @@ void driveAsist(double thrust, double turn){
       headingDelta = targetHeading - currentHeading;
     }
 
-
-
-
     Setpoint = 0;
     Input = headingDelta;
     headingPID.Compute();
     turn = Output;
-
   }
+
   double finalOutput = 0;
+  //If our outputs are below the throttleAssist level lets give them a boost
   if (thrust < 0){
     throttleAssist = throttleAssist + thrust;
   } else if (thrust > 0) {
@@ -404,6 +402,7 @@ void driveAsist(double thrust, double turn){
   } else if (turn < 0) {
     finalOutput = turn - throttleAssist;
   }
+
   simpleDrive(thrust, finalOutput);
 
 }
@@ -421,14 +420,6 @@ void simpleDrive(double thrust, double turn){
   left = thrust + turn;
   right = thrust - turn;
 
-  if (tightTurns){
-    if (turn > 0){
-      left = thrust + turn;
-    }
-    else if (turn < 0){
-      right = thrust - turn;
-    }
-  }
 
   //Safety checks!
   if (left > 255){
