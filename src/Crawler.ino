@@ -397,8 +397,8 @@ void driveAsist(double thrust, double turn){
 void simpleDrive(double thrust, double turn){
   left = 0;
   right = 0;
-  turn = turn * -1; //Invert turn
-
+  turn = turn;
+  
   //This is where the turning logic is.. That's it.
   left = thrust + turn;
   right = thrust - turn;
